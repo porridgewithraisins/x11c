@@ -20,10 +20,10 @@ int bitsToBytes(int bits) {
 
 void output() {
     if (actualTarget != XA_ATOM) {
-        fwrite(data, 1, count * bitsToBytes(format), stdout);
+        unsigned long bytes = count * bitsToBytes(format);
+        fwrite(data, 1, bytes, stdout);
         return;
     }
-
     Atom *targets = (Atom *)data;
     for (unsigned long i = 0; i < count; i++) {
         printf("%s\n", XGetAtomName(display, targets[i]));
@@ -32,12 +32,12 @@ void output() {
 
 int main(const int argc, const char *const argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <target you want to request>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <target you want to request e.g text/plain, text/html, image/png>\n", argv[0]);
         return 1;
     }
+
     display = XOpenDisplay(NULL);
     window = XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
-
     CLIPBOARD = XInternAtom(display, "CLIPBOARD", False);
     A = XInternAtom(display, "A", False);
     INCR = XInternAtom(display, "INCR", False);
@@ -54,9 +54,8 @@ int main(const int argc, const char *const argv[]) {
 
     XGetWindowProperty(display, window, A, 0, __LONG_MAX__ / 4, True, AnyPropertyType, &actualTarget, &format, &count,
                        &bytesLeft, &data);
-
     if (actualTarget != INCR) {
-        fwrite(data, 1, format * count / 8, stdout);
+        output();
         return 0;
     }
 
@@ -68,7 +67,7 @@ int main(const int argc, const char *const argv[]) {
 
         XGetWindowProperty(display, window, A, 0, __LONG_MAX__ / 4, True, AnyPropertyType, &actualTarget, &format,
                            &count, &bytesLeft, &data);
-        fwrite(data, 1, format * count / 8, stdout);
+        output();
     } while (count > 0);
 
     return 0;
