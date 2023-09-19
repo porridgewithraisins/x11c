@@ -1,0 +1,1 @@
+What I think should be a decent explanation of how exactly one uses the X11 clipboard. I tried hard but couldn't find a satisfactory one with proper code example with caveats.

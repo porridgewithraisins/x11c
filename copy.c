@@ -1,14 +1,34 @@
+#include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <stdio.h>
 
 Display *display;
 Window window;
-Atom CLIPBOARD, A, TARGETS, INCR, target;
+Atom CLIPBOARD, A, INCR, target;
 XEvent event;
 Atom actualTarget;
 int format;
 unsigned long bytesLeft, count;
 unsigned char *data;
+
+int bitsToBytes(int bits) {
+    if (bits == 32) return sizeof(long);
+    if (bits == 16) return sizeof(short);
+    if (bits == 8) return 1;
+    return 0;
+}
+
+void output() {
+    if (actualTarget != XA_ATOM) {
+        fwrite(data, 1, count * bitsToBytes(format), stdout);
+        return;
+    }
+
+    Atom *targets = (Atom *)data;
+    for (unsigned long i = 0; i < count; i++) {
+        printf("%s\n", XGetAtomName(display, targets[i]));
+    }
+}
 
 int main(const int argc, const char *const argv[]) {
     if (argc < 2) {
@@ -16,18 +36,17 @@ int main(const int argc, const char *const argv[]) {
         return 1;
     }
     display = XOpenDisplay(NULL);
-    window = XCreateSimpleWindow(display, DefaultRootWindow(display), -10, -10, 1, 1, 0, 0, 0);
+    window = XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
+
     CLIPBOARD = XInternAtom(display, "CLIPBOARD", False);
     A = XInternAtom(display, "A", False);
     INCR = XInternAtom(display, "INCR", False);
     target = XInternAtom(display, argv[1], False);
 
     XConvertSelection(display, CLIPBOARD, target, A, window, CurrentTime);
-
     do {
         XNextEvent(display, &event);
     } while (event.type != SelectionNotify || event.xselection.selection != CLIPBOARD);
-
     if (event.xselection.property == None) {
         fprintf(stderr, "Failed to convert selection to target %s\n", argv[1]);
         return 1;
