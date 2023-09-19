@@ -62,24 +62,31 @@ int main(const int argc, const char *const argv[]) {
         fprintf(stderr, "Failed to convert selection to target %s\n", argv[1]);
         return 1;
     }
-
-    XGetWindowProperty(display, window, A, 0, __LONG_MAX__ / 4, True, AnyPropertyType, &actualTarget, &format, &count,
-                       &bytesLeft, &data);
+    XGetWindowProperty(display, window, A, 0, 0, False, AnyPropertyType, &actualTarget, &format, &count, &bytesLeft,
+                       &data);
     if (actualTarget != INCR) {
+        XGetWindowProperty(display, window, A, 0, bytesLeft, True, AnyPropertyType, &actualTarget, &format, &count,
+                           &bytesLeft, &data);
         output();
         return 0;
     }
-
+    XDeleteProperty(display, window, A);
     XSelectInput(display, window, PropertyChangeMask);
-    do {
+    while (True) {
         do {
             XNextEvent(display, &event);
         } while (event.type != PropertyNotify || event.xproperty.state != PropertyNewValue);
 
-        XGetWindowProperty(display, window, A, 0, __LONG_MAX__ / 4, True, AnyPropertyType, &actualTarget, &format,
-                           &count, &bytesLeft, &data);
-        output();
-    } while (count > 0);
+        XGetWindowProperty(display, window, A, 0, 0, False, AnyPropertyType, &actualTarget, &format, &count, &bytesLeft,
+                           &data);
+        if (bytesLeft == 0) {
+            XDeleteProperty(display, window, A);
+            break;
+        }
 
+        XGetWindowProperty(display, window, A, 0, bytesLeft, True, AnyPropertyType, &actualTarget, &format, &count,
+                           &bytesLeft, &data);
+        output();
+    }
     return 0;
 }
