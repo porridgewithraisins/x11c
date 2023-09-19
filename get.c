@@ -19,20 +19,31 @@ int bitsToBytes(int bits) {
 }
 
 void output() {
-    if (actualTarget != XA_ATOM) {
-        unsigned long bytes = count * bitsToBytes(format);
-        fwrite(data, 1, bytes, stdout);
-        return;
-    }
-    Atom *targets = (Atom *)data;
-    for (unsigned long i = 0; i < count; i++) {
-        printf("%s\n", XGetAtomName(display, targets[i]));
+    switch (actualTarget) {
+        case XA_ATOM:
+            Atom *targets = (Atom *)data;
+            for (unsigned long i = 0; i < count; i++) {
+                printf("%s\n", XGetAtomName(display, targets[i]));
+            }
+            break;
+        case XA_INTEGER:
+            long *nums = (long *)data;
+            unsigned long num_longs = count * bitsToBytes(format) / sizeof *nums;
+            for (int i = 0; i < num_longs; i++) {
+                printf("%ld\n", nums[i]);
+            }
+            break;
+        default:
+            fwrite(data, 1, count * bitsToBytes(format), stdout);
     }
 }
 
 int main(const int argc, const char *const argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <target you want to request e.g text/plain, text/html, image/png>\n", argv[0]);
+        fprintf(stderr,
+                "Usage: %s <target you want to request e.g text/plain, text/html, image/png>\n"
+                "Use TARGETS to query the full list of available targets.\n ",
+                argv[0]);
         return 1;
     }
 
