@@ -4,13 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef FREAD_SIZE
 #define FREAD_SIZE 4194304
-#endif
-
-#define Failure !Success
-
 #define MAX_ACTIVE 512  // this is the max number of X11 windows, so we will never™ reach it
+#define Failure !Success
 
 Display *display;
 Window window;
