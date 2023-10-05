@@ -38,7 +38,7 @@ void output() {
     }
 }
 
-int main(const int argc, const char *const argv[]) {
+int paste(const int argc, const char *const argv[]) {
     if (argc < 2) {
         fprintf(stderr,
                 "Usage: %s <target you want to request e.g text/plain, text/html, image/png>\n"
