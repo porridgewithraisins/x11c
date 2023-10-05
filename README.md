@@ -4,6 +4,12 @@ An xclip alternative, with support for pasting multiple targets.
 
 You can't expose data with multiple targets, making it unfit for usage in a clipboard manager that wants to support rich text / images in web apps like google docs. And it has lots of additional functionality that I don't need.
 
+### How to get
+```bash
+git clone https://github.com/porridgewithraisins/x11cp
+cd x11cp
+```
+
 ### How to use
 
 - Get from clipboard
