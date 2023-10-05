@@ -12,6 +12,7 @@ You can't expose data with multiple targets, making it unfit for usage in a clip
     gcc -lX11 get.c -o getcp
     ./getcp text/plain # or any other target
     ./getcp TARGETS # to query a list of available targets
+    # writes to stdout
 ```
 
 What it says on the tin.
@@ -24,22 +25,20 @@ What it says on the tin.
     echo hello | ./putcp text/plain -
     # multiple targets
     ./putcp image/png file.png image/jpeg file.jpg text/html fragment.html
+    # streams as data source
     cat file.png | ./putcp image/png - image/jpeg <(curl http://so.m/e.jpg) - text/html <(cat file.html | awk ... | grep ... | cut ...)
 ```
 
 The format is
-`./putcp target1 fd1 target2 fd2`. You can use `-` in place of any fd to read from stdin. Any file/stream can be given as data sources.
+`./putcp target1 fd1 target2 fd2`. You can use `-` in place of any fd to specify stdin. Any file/stream can be given as a data source.
 
-All the files/streams provided will be read to completion and stored in memory. However, if the target specified for a file/target is _never_ requested, it will never be read.
+All the files/streams provided will be read to completion and stored in memory _at the time the corresponding target is requested_. Hence, if the target specified for a file/stream is _never_ requested, it will _never_ be read. Once read, the data will be kept in memory to serve future requests.
 
-- **You should use `& disown` in your shell if you're using this as part of a script**
+**You should use `& disown` in your shell if you're using `putcp` as part of a script**
 
-In X11, clipboard is implemented as message passing between the window data is being copied from (this program) and wherever you're pasting it. So, this app will run in the background when you use `./putcp` (Until some other app becomes the copied-from window).
+In X11, clipboard is implemented as message passing between the window data is being copied from (this program) and wherever you're pasting it. So, this app will run in the background when you use `./putcp` (Until some other app becomes the copied-from window, at which point this program quits).
 
-- **There is no default target, or default source**
+**There is no default target, or default source, or default anything**
 
 Make a shell alias if you want.
 
-### Weird people
-
-If you're using this, and for some reason, reading the files/streams 4MiB at a time with `fread()` is a problem for you, you can tune it with `-DFREAD_SIZE` (in bytes)
