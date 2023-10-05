@@ -1,5 +1,7 @@
 An xclip alternative, with support for pasting multiple targets.
 
+Only touches the main (ctrl+c, right-click + copy) clipboard, doesn't touch the primary selection (middle click) or secondary or the cut buffer.
+
 ### Why not xclip
 
 You can't expose data with multiple targets, making it unfit for usage in a clipboard manager that wants to support rich text / images in web apps like google docs. And it has lots of additional functionality that I don't need.
@@ -47,3 +49,9 @@ In X11, clipboard is implemented as message passing between the window data is b
 ### There is no default target, or default source, or default anything
 
 Make a shell alias if you want.
+
+### For the initiated
+
+This follows the protocol well
+ - It supports INCR
+ - Finishes serving all ongoing transfers even when the selection owner changes
