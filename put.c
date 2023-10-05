@@ -10,7 +10,7 @@
 
 #define Failure !Success
 
-#define MAX_ACTIVE 512  // this is the max number of X11 clients, so we will never™ reach it
+#define MAX_ACTIVE 512  // this is the max number of X11 windows, so we will never™ reach it
 
 Display *display;
 Window window;
