@@ -2,6 +2,8 @@
 #include <X11/Xlib.h>
 #include <stdio.h>
 
+#define Failure !Success
+
 // x11 primitives and common atoms
 Display *display;
 Window window;
@@ -44,11 +46,11 @@ void output() {
     }
 }
 
-int paste(const int argc, const char *const argv[]) {
+int main(const int argc, const char *const argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <target you want to request, or `TARGETS` to query the list of available targets>\n",
                 argv[0]);
-        return 1;
+        return Failure;
     }
 
     display = XOpenDisplay(NULL);
@@ -67,7 +69,7 @@ int paste(const int argc, const char *const argv[]) {
     // the target is not available
     if (event.xselection.property == None) {
         fprintf(stderr, "Failed to convert selection to target %s\n", argv[1]);
-        return 1;
+        return Failure;
     }
 
     // get the data
@@ -80,10 +82,10 @@ int paste(const int argc, const char *const argv[]) {
                            &bytesLeft, &data);
         // print out the data
         output();
-        return 0;
+        return Success;
     }
 
-    // start the INCR transfer
+    // otherwise, start the INCR transfer
     XDeleteProperty(display, window, A);
     // we need to listen to when our property is changed
     XSelectInput(display, window, PropertyChangeMask);
@@ -107,5 +109,5 @@ int paste(const int argc, const char *const argv[]) {
         // print out this chunk
         output();
     }
-    return 0;
+    return Success;
 }
