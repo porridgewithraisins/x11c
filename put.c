@@ -101,51 +101,48 @@ Bool serviceNewTransfer() {
     }
 
     // find the listing index for the target requested
-    int listing_idx;
-    for (listing_idx = 0; listing_idx < listing_count; listing_idx++) {
-        if (targets[listing_idx] == request->target) break;
-    }
+    for (int listing_idx = 0; listing_idx < listing_count; listing_idx++) {
+        if (targets[listing_idx] != request->target) continue;
 
-    if (listing_idx == listing_count) {
-        fprintf(stderr, "No data specified for target %s\n", XGetAtomName(display, targets[listing_idx]));
+        // if we haven't already read the file/stream, do so
+        if (!listings[listing_idx].length || !listings[listing_idx].contents) {
+            if (Success != slurp_file(listings + listing_idx)) {
+                fprintf(stderr, "Failed to read file %s for target %s\n", listings[listing_idx].filename,
+                        XGetAtomName(display, targets[listing_idx]));
+                return Failure;
+            }
+        }
+        // we can send it all in one go without INCR
+        if (listings[listing_idx].length < politeChunkSize) {
+            XChangeProperty(display, request->requestor, request->property, request->target, 8, PropModeReplace,
+                            listings[listing_idx].contents, listings[listing_idx].length);
+            return Success;
+        }
+
+        // otherwise, we have to signal the start of an INCR transfer
+        XChangeProperty(display, request->requestor, request->property, INCR, 32, PropModeReplace, NULL, 0);
+        // we have to subscribe to property changes on the requestors window
+        // ACKs by the requestor in the INCR protocol are indicated by deleting properties on their window
+        XSelectInput(display, request->requestor, PropertyChangeMask);
+
+        // find the first empty slot and put the initial state there
+        for (int i = 0; i < MAX_ACTIVE; i++) {
+            if (!ongoing_transfers[i]._PRESENT) {
+                ongoing_transfers[i] = (OngoingTransfer){.requestor = request->requestor,
+                                                         .property = request->property,
+                                                         .listing = listings + listing_idx,
+                                                         .target = targets[listing_idx],
+                                                         .offset = 0,
+                                                         ._PRESENT = True};
+                return Success;
+            }
+        }
+
+        fprintf(stderr, "All active slots full, what are you even doing?\n");
         return Failure;
     }
 
-    // if we haven't already read the file/stream, do so
-    if (!listings[listing_idx].length || !listings[listing_idx].contents) {
-        if (Success != slurp_file(listings + listing_idx)) {
-            fprintf(stderr, "Failed to read file %s for target %s\n", listings[listing_idx].filename,
-                    XGetAtomName(display, targets[listing_idx]));
-            return Failure;
-        }
-    }
-
-    // we can send it all in one go without INCR
-    if (listings[listing_idx].length < politeChunkSize) {
-        XChangeProperty(display, request->requestor, request->property, request->target, 8, PropModeReplace,
-                        listings[listing_idx].contents, listings[listing_idx].length);
-        return Success;
-    }
-
-    // otherwise, we have to signal the start of an INCR transfer
-    XChangeProperty(display, request->requestor, request->property, INCR, 32, PropModeReplace, NULL, 0);
-
-    // we have to subscribe to property changes on the requestors window
-    // ACKs by the requestor in the INCR protocol are indicated by deleting properties on their window
-    XSelectInput(display, request->requestor, PropertyChangeMask);
-
-    // find the first empty slot and put the initial state there
-    for (int i = 0; i < MAX_ACTIVE; i++) {
-        if (!ongoing_transfers[i]._PRESENT) {
-            ongoing_transfers[i] = (OngoingTransfer){.requestor = request->requestor,
-                                                     .property = request->property,
-                                                     .listing = listings + listing_idx,
-                                                     .target = targets[listing_idx],
-                                                     .offset = 0,
-                                                     ._PRESENT = True};
-            return Success;
-        }
-    }
+    fprintf(stderr, "No data specified for target %s. Ignoring request\n", XGetAtomName(display, request->target));
     return Failure;
 }
 
@@ -161,8 +158,6 @@ Bool serviceOngoingTransfer() {
 
     // "I don't even know who you are"
     if (!state) {
-        fprintf(stderr, "Window %lu requested incremental transfer after servicing was completed\n",
-                event.xproperty.window);
         return Failure;
     }
 
