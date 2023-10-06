@@ -138,7 +138,7 @@ Bool serviceNewTransfer() {
             }
         }
 
-        fprintf(stderr, "All active slots full, what are you even doing?\n");
+        fprintf(stderr, "All slots full, what are you even doing?\n");
         return Failure;
     }
 
