@@ -28,7 +28,6 @@ Listing *listings;
 int listing_count;
 Atom *targets;
 
-
 // data structure for a guy that we are currently sending data incrementally to
 typedef struct {
     Window requestor;
@@ -97,7 +96,7 @@ Bool serviceNewTransfer() {
     // they requested TARGETS, so send that and return
     if (TARGETS == request->target) {
         XChangeProperty(display, request->requestor, request->property, XA_ATOM, 32, PropModeReplace,
-                        (unsigned char *)targets, listing_count + 1); // +1 as the TARGETS atom there
+                        (unsigned char *)targets, listing_count + 1);  // +1 as the TARGETS atom there
         return Success;
     }
 
