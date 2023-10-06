@@ -12,7 +12,6 @@
 Display *display;
 Window window;
 Atom CLIPBOARD, INCR, TARGETS;
-Atom *targets;
 
 // maximum property size as per convention for this x server
 // there is also a 1MB hard limit on property sizes
@@ -24,8 +23,11 @@ typedef struct {
     char *contents;
     size_t length;
 } Listing;
+
 Listing *listings;
 int listing_count;
+Atom *targets;
+
 
 // data structure for a guy that we are currently sending data incrementally to
 typedef struct {
@@ -95,34 +97,34 @@ Bool serviceNewTransfer() {
     // they requested TARGETS, so send that and return
     if (TARGETS == request->target) {
         XChangeProperty(display, request->requestor, request->property, XA_ATOM, 32, PropModeReplace,
-                        (unsigned char *)targets, listing_count + 1);
+                        (unsigned char *)targets, listing_count + 1); // +1 as the TARGETS atom there
         return Success;
     }
 
     // find the listing index for the target requested
-    int i;
-    for (i = 0; i < listing_count; i++) {
-        if (targets[i] == request->target) break;
+    int listing_idx;
+    for (listing_idx = 0; listing_idx < listing_count; listing_idx++) {
+        if (targets[listing_idx] == request->target) break;
     }
 
-    if (i == listing_count) {
-        fprintf(stderr, "No data specified for target %s\n", XGetAtomName(display, targets[i]));
+    if (listing_idx == listing_count) {
+        fprintf(stderr, "No data specified for target %s\n", XGetAtomName(display, targets[listing_idx]));
         return Failure;
     }
 
     // if we haven't already read the file/stream, do so
-    if (!listings[i].length || !listings[i].contents) {
-        if (Success != slurp_file(listings + i)) {
-            fprintf(stderr, "Failed to read file %s for target %s\n", listings[i].filename,
-                    XGetAtomName(display, targets[i]));
+    if (!listings[listing_idx].length || !listings[listing_idx].contents) {
+        if (Success != slurp_file(listings + listing_idx)) {
+            fprintf(stderr, "Failed to read file %s for target %s\n", listings[listing_idx].filename,
+                    XGetAtomName(display, targets[listing_idx]));
             return Failure;
         }
     }
 
     // we can send it all in one go without INCR
-    if (listings[i].length < politeChunkSize) {
+    if (listings[listing_idx].length < politeChunkSize) {
         XChangeProperty(display, request->requestor, request->property, request->target, 8, PropModeReplace,
-                        (unsigned char *)listings[i].contents, listings[i].length);
+                        listings[listing_idx].contents, listings[listing_idx].length);
         return Success;
     }
 
@@ -138,8 +140,8 @@ Bool serviceNewTransfer() {
         if (!ongoing_transfers[i]._PRESENT) {
             ongoing_transfers[i] = (OngoingTransfer){.requestor = request->requestor,
                                                      .property = request->property,
-                                                     .listing = listings + i,
-                                                     .target = targets[i],
+                                                     .listing = listings + listing_idx,
+                                                     .target = targets[listing_idx],
                                                      .offset = 0,
                                                      ._PRESENT = True};
             return Success;
@@ -160,7 +162,8 @@ Bool serviceOngoingTransfer() {
 
     // "I don't even know who you are"
     if (!state) {
-        fprintf(stderr, "Window %lu requested incremental transfer after servicing was completed\n", event.xproperty.window);
+        fprintf(stderr, "Window %lu requested incremental transfer after servicing was completed\n",
+                event.xproperty.window);
         return Failure;
     }
 
@@ -220,17 +223,16 @@ int main(const int argc, const char *const argv[]) {
 
     Bool lost_ownership = False;
     while (True) {
-        // if we lost ownership, we still need to service active requestors that we are still sending data to
-        // incrementally
+        // if we lost ownership, we still need to service ongoing transfers to completion
         if (lost_ownership) {
-            Bool active_requestors_remaining = False;
+            Bool ongoing_transfers_remaining = False;
             for (int i = 0; i < MAX_ACTIVE; i++) {
                 if (ongoing_transfers[i]._PRESENT) {
-                    active_requestors_remaining = True;
+                    ongoing_transfers_remaining = True;
                     break;
                 }
             }
-            if (!active_requestors_remaining){
+            if (!ongoing_transfers_remaining) {
                 fprintf(stderr, "All ongoing transfers have completed, terminating\n");
                 break;
             }
