@@ -4,16 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FREAD_SIZE 4194304
-#define MAX_ACTIVE 512  // this is the max number of X11 windows, so we will never™ reach it
+#define FREAD_SIZE 4194304  // 4MiB
+#define MAX_ACTIVE 512      // this is the max number of X11 windows, so we will never™ reach it
 #define Failure !Success
 
+// x11 primitives and common atoms
 Display *display;
 Window window;
 Atom CLIPBOARD, INCR, TARGETS;
 Atom *targets;
+
+// maximum property size as per convention for this x server
+// there is also a 1MB hard limit on property sizes
 size_t politeChunkSize;
 
+// data structure for a file/stream
 typedef struct {
     const char *filename;
     char *contents;
@@ -22,25 +27,25 @@ typedef struct {
 Listing *listings;
 int listing_count;
 
+// data structure for a guy that we are currently sending data incrementally to
 typedef struct {
     Window requestor;
     Atom property;
     Listing *listing;
     Atom target;
     size_t offset;
-    Bool _PRESENT;
-} ActiveRequestor;
+    Bool _PRESENT;  // flag to indicate if this spot in the array is taken
+} OngoingTransfer;
+OngoingTransfer ongoing_transfers[MAX_ACTIVE] = {0};
 
-ActiveRequestor active_requestors[MAX_ACTIVE] = {0};
-
-Bool lost_ownership = False;
 XEvent event;
 
-Bool slurp_file(Listing *fc) {
+/* Reads an entire file/stream into a buffer. Does not use ftell, fseek, etc, so works on streams as well. */
+Bool slurp_file(Listing *listing) {
     size_t size = 0, used = 0;
     char *buf = NULL;
 
-    FILE *fd = fopen(fc->filename, "r");
+    FILE *fd = fopen(listing->filename, "r");
     if (!fd) return Failure;
 
     while (True) {
@@ -74,8 +79,8 @@ Bool slurp_file(Listing *fc) {
     }
 
     buf[used] = '\0';
-    fc->contents = buf;
-    fc->length = used;
+    listing->contents = buf;
+    listing->length = used;
 
     return Success;
 }
@@ -84,41 +89,54 @@ void usage(const char *program) {
     fprintf(stderr, "Usage: %s target1 file1 target2 file2... Use - for stdin\n", program);
 }
 
-Bool serviceNewRequestor() {
+Bool serviceNewTransfer() {
     XSelectionRequestEvent *request = &event.xselectionrequest;
+
+    // they requested TARGETS, so send that and return
     if (TARGETS == request->target) {
         XChangeProperty(display, request->requestor, request->property, XA_ATOM, 32, PropModeReplace,
                         (unsigned char *)targets, listing_count + 1);
         return Success;
     }
 
+    // find the listing index for the target requested
     int i;
     for (i = 0; i < listing_count; i++) {
         if (targets[i] == request->target) break;
     }
 
-    if (i == listing_count) return Failure;
+    if (i == listing_count) {
+        fprintf(stderr, "No data specified for target %s\n", XGetAtomName(display, targets[i]));
+        return Failure;
+    }
 
+    // if we haven't already read the file/stream, do so
     if (!listings[i].length || !listings[i].contents) {
         if (Success != slurp_file(listings + i)) {
-            fprintf(stderr, "Failed to read file %s\n", listings[i].filename);
+            fprintf(stderr, "Failed to read file %s for target %s\n", listings[i].filename,
+                    XGetAtomName(display, targets[i]));
             return Failure;
         }
     }
 
+    // we can send it all in one go without INCR
     if (listings[i].length < politeChunkSize) {
         XChangeProperty(display, request->requestor, request->property, request->target, 8, PropModeReplace,
                         (unsigned char *)listings[i].contents, listings[i].length);
         return Success;
     }
 
-    // have to start INCR transfer
+    // otherwise, we have to signal the start of an INCR transfer
     XChangeProperty(display, request->requestor, request->property, INCR, 32, PropModeReplace, NULL, 0);
+
+    // we have to subscribe to property changes on the requestors window
+    // ACKs by the requestor in the INCR protocol are indicated by deleting properties on their window
     XSelectInput(display, request->requestor, PropertyChangeMask);
 
+    // find the first empty slot and put the initial state there
     for (int i = 0; i < MAX_ACTIVE; i++) {
-        if (!active_requestors[i]._PRESENT) {
-            active_requestors[i] = (ActiveRequestor){.requestor = request->requestor,
+        if (!ongoing_transfers[i]._PRESENT) {
+            ongoing_transfers[i] = (OngoingTransfer){.requestor = request->requestor,
                                                      .property = request->property,
                                                      .listing = listings + i,
                                                      .target = targets[i],
@@ -130,32 +148,36 @@ Bool serviceNewRequestor() {
     return Failure;
 }
 
-Bool serviceActiveRequestor() {
-    ActiveRequestor *state = NULL;
+Bool serviceOngoingTransfer() {
+    // retrieve the state we had stored earlier related to this requestor
+    OngoingTransfer *state = NULL;
     for (int i = 0; i < MAX_ACTIVE; i++) {
-        if (active_requestors[i]._PRESENT && (active_requestors[i].requestor == event.xproperty.window)) {
-            state = active_requestors + i;
+        if (ongoing_transfers[i]._PRESENT && (ongoing_transfers[i].requestor == event.xproperty.window)) {
+            state = ongoing_transfers + i;
             break;
         }
     }
+
+    // "I don't even know who you are"
     if (!state) {
+        fprintf(stderr, "Window %lu requested incremental transfer after servicing was completed\n", event.xproperty.window);
         return Failure;
     }
 
+    // we have already sent everything
     if (state->offset >= state->listing->length) {
         XChangeProperty(display, state->requestor, state->property, state->target, 8, PropModeReplace, NULL, 0);
-        *state = (ActiveRequestor){0};
+        *state = (OngoingTransfer){0};
         return Success;
     }
 
+    // send the next chunk and update our offset
     size_t chunk_size = politeChunkSize;
     if (state->offset + chunk_size > state->listing->length) {
         chunk_size = state->listing->length - state->offset;
     }
-
     XChangeProperty(display, state->requestor, state->property, state->target, 8, PropModeReplace,
                     state->listing->contents + state->offset, chunk_size);
-
     state->offset += chunk_size;
 
     return Success;
@@ -164,13 +186,13 @@ Bool serviceActiveRequestor() {
 int main(const int argc, const char *const argv[]) {
     if ((argc - 1) % 2 != 0) {
         usage(argv[0]);
-        return 1;
+        return Failure;
     }
 
     display = XOpenDisplay(NULL);
     if (!display) {
         fprintf(stderr, "Could not open X display\n");
-        return 1;
+        return Failure;
     }
     window = XCreateSimpleWindow(display, DefaultRootWindow(display), 0, 0, 1, 1, 0, 0, 0);
     CLIPBOARD = XInternAtom(display, "CLIPBOARD", False);
@@ -178,7 +200,7 @@ int main(const int argc, const char *const argv[]) {
     TARGETS = XInternAtom(display, "TARGETS", False);
 
     listing_count = (argc - 1) / 2;
-    targets = malloc((listing_count + 1) * sizeof *targets);
+    targets = malloc((listing_count + 1) * sizeof *targets);  // +1 to store TARGETS itself
     listings = malloc(listing_count * sizeof *listings);
     for (int i = 1, j = 0; i < argc, j < listing_count; i += 2, j++) {
         const char *filename = strcmp(argv[i + 1], "-") == 0 ? "/dev/stdin" : argv[i + 1];
@@ -190,31 +212,41 @@ int main(const int argc, const char *const argv[]) {
     XSetSelectionOwner(display, CLIPBOARD, window, CurrentTime);
     if (XGetSelectionOwner(display, CLIPBOARD) != window) {
         fprintf(stderr, "Failed to acquire ownership of clipboard\n");
-        return 1;
+        return Failure;
     }
 
     politeChunkSize = (size_t)XExtendedMaxRequestSize(display) / 4;
     if (!politeChunkSize) politeChunkSize = (size_t)XMaxRequestSize(display) / 4;
 
+    Bool lost_ownership = False;
     while (True) {
+        // if we lost ownership, we still need to service active requestors that we are still sending data to
+        // incrementally
         if (lost_ownership) {
             Bool active_requestors_remaining = False;
             for (int i = 0; i < MAX_ACTIVE; i++) {
-                if (active_requestors[i]._PRESENT) {
+                if (ongoing_transfers[i]._PRESENT) {
                     active_requestors_remaining = True;
                     break;
                 }
             }
-            if (!active_requestors_remaining) break;
+            if (!active_requestors_remaining){
+                fprintf(stderr, "All ongoing transfers have completed, terminating\n");
+                break;
+            }
         }
+
         XNextEvent(display, &event);
         switch (event.type) {
             case SelectionClear:
                 lost_ownership = True;
+                fprintf(stderr, "Lost ownership of the clipboard. Will quit after completing ongoing transfers\n");
                 break;
             case SelectionRequest:
                 if (event.xselectionrequest.selection != CLIPBOARD) break;
-                Bool status = serviceNewRequestor();
+                if (lost_ownership) break;  // if we lost ownership, we shouldn't service new requestors
+
+                Bool status = serviceNewTransfer();
                 XSendEvent(
                     display, event.xselectionrequest.requestor, False, NoEventMask,
                     &(XEvent){.xselection = {.display = display,
@@ -227,10 +259,10 @@ int main(const int argc, const char *const argv[]) {
                 break;
             case PropertyNotify:
                 if (event.xproperty.state != PropertyDelete) break;
-                serviceActiveRequestor();
+                serviceOngoingTransfer();
                 break;
         }
     }
 
-    return 0;
+    return Success;
 }
