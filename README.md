@@ -38,7 +38,7 @@ What it says on the tin.
 ```
 
 The format is
-`./putcp target1 fd1 target2 fd2`. You can use `-` in place of any fd to specify stdin. Any file/stream can be given as a data source.
+`./putcp target1 fd1 target2 fd2...`. You can use `-` in place of any fd to specify stdin. Any file/stream can be given as a data source.
 
 Each file/stream provided will be read to completion and stored in memory _at the time the corresponding target is requested_. Hence, if the target specified is _never_ requested, it will _never_ be read. Once read, the data will be kept in memory to serve future requests.
 
