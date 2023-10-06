@@ -51,10 +51,6 @@ In X11, clipboard is implemented as message passing between the window data is b
 
 Make a shell alias if you want.
 
-### Chatty `stderr`
-
-A lot of status information is printed on stderr by `putcp`.
-
 ### For the initiated
 
 This follows the protocol well
