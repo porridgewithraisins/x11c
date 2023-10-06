@@ -97,6 +97,8 @@ Bool serviceNewRequestor() {
         if (targets[i] == request->target) break;
     }
 
+    if (i == listing_count) return Failure;
+
     if (!listings[i].length || !listings[i].contents) {
         if (Success != slurp_file(listings + i)) {
             fprintf(stderr, "Failed to read file %s\n", listings[i].filename);
