@@ -17,10 +17,10 @@ cd x11cp
 - Get from clipboard
 
 ```bash
-    gcc -lX11 get.c -o getcp
-    ./getcp text/plain # or any other target
-    ./getcp TARGETS # to query a list of available targets
-    # writes to stdout
+gcc -lX11 get.c -o getcp
+getcp text/plain # or any other target
+getcp TARGETS # to query a list of available targets
+# writes to stdout
 ```
 
 What it says on the tin.
@@ -28,13 +28,13 @@ What it says on the tin.
 - Put in clipboard
 
 ```bash
-    gcc -lX11 put.c -o putcp
-    # simple, single target
-    echo hello | ./putcp text/plain -
-    # multiple targets
-    ./putcp image/png file.png image/jpeg file.jpg text/html fragment.html
-    # streams as data source
-    cat file.png | ./putcp image/png - image/jpeg <(curl http://so.m/e.jpg) - text/html <(cat file.html | awk ... | grep ... | cut ...)
+gcc -lX11 put.c -o putcp
+# simple, single target
+echo hello | ./putcp text/plain -
+# multiple targets
+putcp image/png file.png image/jpeg file.jpg text/html fragment.html
+# streams as data source
+cat file.png | ./putcp image/png - image/jpeg <(curl http://so.m/e.jpg) - text/html <(cat file.html | awk ... | grep ... | cut ...)
 ```
 
 The format is
@@ -42,10 +42,20 @@ The format is
 
 Each file/stream provided will be read to completion and stored in memory _at the time the corresponding target is requested_. Hence, if the target specified is _never_ requested, it will _never_ be read. Once read, the data will be kept in memory to serve future requests.
 
+- Wait for clipboard data
+
+This is not useful for direct CLI usage, but might be useful for any applications that need to block and listen to clipboard changes
+
+```bash
+gcc -lX11 -lXfixes wait.c -o waitforcp
+./waitforcp # blocks
+echo now there is data on the clipboard: $(getcp text/plain)
+```
+
 ### You should use `& disown` in your shell if you're using `putcp` as part of a script
 (Or if you want your shell prompt back)
 
-In X11, clipboard is implemented as message passing between the window data is being copied from (this program) and wherever you're pasting it. So, `./putcp` has to run it's event loop until some other window gets copied from (xclip uses `fork()` to background the event loop).
+In X11, clipboard is implemented as message passing between the window data is being copied from (this program) and wherever you're pasting it. So, `putcp` has to run it's event loop until some other window gets copied from (xclip uses `fork()` to background the event loop).
 
 ### There is no default target, or default source, or default anything
 
