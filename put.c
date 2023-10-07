@@ -227,7 +227,6 @@ int main(const int argc, const char *const argv[]) {
                 }
             }
             if (!ongoing_transfers_remaining) {
-                fprintf(stderr, "All ongoing transfers have completed, terminating\n");
                 break;
             }
         }
