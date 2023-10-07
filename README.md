@@ -4,7 +4,7 @@ Only touches the main (ctrl+c, right-click + copy) clipboard, doesn't touch the 
 
 ### Why not xclip
 
-You can't expose data with multiple targets, making it unfit for usage in a clipboard manager that wants to support rich text / images in web apps like google docs. And it has lots of additional functionality that I don't need.
+xclip can't expose data with multiple targets, making it unfit for usage in a clipboard manager that wants to support rich text / images in web apps like google docs. And it has lots of additional functionality that I don't need.
 
 ### How to get
 ```bash
