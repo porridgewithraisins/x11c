@@ -7,6 +7,7 @@ Only touches the main (ctrl+c, right-click + copy) clipboard, doesn't touch the 
 xclip can't expose data with multiple targets, making it unfit for usage in a clipboard manager that wants to support rich text / images in web apps like google docs. And it has lots of additional functionality that I don't need.
 
 ### How to get
+
 ```bash
 git clone https://github.com/porridgewithraisins/x11cp
 cd x11cp
@@ -53,6 +54,7 @@ echo now there is data on the clipboard: $(getcp text/plain)
 ```
 
 ### You should use `& disown` in your shell if you're using `putcp` as part of a script
+
 (Or if you want your shell prompt back)
 
 In X11, clipboard is implemented as message passing between the window data is being copied from (this program) and wherever you're pasting it. So, `putcp` has to run it's event loop until some other window gets copied from (xclip uses `fork()` to background the event loop).
@@ -64,5 +66,6 @@ Make a shell alias if you want.
 ### For the initiated
 
 This follows the protocol well
- - It supports INCR
- - Finishes serving all ongoing transfers even when the selection owner changes
+
+- It supports INCR
+- Finishes serving all ongoing transfers even when the selection owner changes
