@@ -181,7 +181,7 @@ Bool serviceOngoingTransfer() {
 }
 
 int main(const int argc, const char *const argv[]) {
-    if ((argc - 1) % 2 != 0) {
+    if ((argc - 1) % 2 != 0 || argc == 1) {
         usage(argv[0]);
         return Failure;
     }
